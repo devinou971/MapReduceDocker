@@ -6,6 +6,10 @@ print("Manager started")
 
 DB_HOST = os.environ["DB_HOST"]
 DB_PORT = os.environ["DB_PORT"]
+
+print("DB_HOST:", DB_HOST)
+print("DB_PORT:", DB_PORT)
+
 r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True, socket_connect_timeout=15)
 
 file_content = ""
@@ -59,13 +63,13 @@ def get_text_splits(text:str, num_parts:int):
     return parts
 
 print(f"Splitting the file for n_mappers = {n_mappers}")
-# file_splits = split_text(file_content, n_mappers)
 file_splits = get_text_splits(file_content, n_mappers)
 print(file_splits)
 
 print(f"Sending the splits to the mappers")
 for i in range(n_mappers):
     print("Manager sending to mapper", i+1, "data with length", len(file_splits[i]))
+    r.set(f"mapper-{i+1}-input", file_splits[i])
     r.publish(f"mapper_{i+1}_input", file_splits[i])
 
 p.unsubscribe("start")

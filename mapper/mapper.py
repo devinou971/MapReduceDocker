@@ -4,25 +4,43 @@ import os
 import re
 from collections import Counter
 import hashlib
+import socket
+
 
 DB_HOST = os.environ["DB_HOST"]
 DB_PORT = os.environ["DB_PORT"]
 
 r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True, socket_connect_timeout=15)
 
-MAPPER_ID = r.incr("n_mappers")
+RESUMING_OLD_PROCESS = False
 
-p = r.pubsub()
-p.subscribe(f"mapper_{MAPPER_ID}_input")
+# Here, we get the mapper ID from the Redis DB
+hostname = socket.gethostname()
+print("Hostname:", hostname)
+MAPPER_ID = r.get(hostname)
 
-print("Mapper", MAPPER_ID, "subscribed")
+if MAPPER_ID is None:
+    print("Creating new mapper ID")
+    MAPPER_ID = r.incr("n_mappers")
+    r.set(hostname, MAPPER_ID)
+else:
+    RESUMING_OLD_PROCESS = True
+    print("Last mapper died")
 
+print("Mapper", MAPPER_ID, "started")
 
-mapper_input = p.get_message(timeout=10,  ignore_subscribe_messages=True)
-while mapper_input is None:
+mapper_subtext_ids = r.get(f"mapper-{MAPPER_ID}-input")
+if mapper_subtext_ids is None:
+    p = r.pubsub()
+    p.subscribe(f"mapper_{MAPPER_ID}_input")
+
+    print("Mapper", MAPPER_ID, "subscribed")
+
     mapper_input = p.get_message(timeout=10,  ignore_subscribe_messages=True)
+    while mapper_input is None:
+        mapper_input = p.get_message(timeout=10,  ignore_subscribe_messages=True)
 
-mapper_subtext_ids = mapper_input["data"]
+    mapper_subtext_ids = mapper_input["data"]
 
 start = int(mapper_subtext_ids.split(" ")[0])
 end = int(mapper_subtext_ids.split(" ")[1])
@@ -50,7 +68,6 @@ def get_reducer_key(word, num_reducers):
     return hash_val % num_reducers
 
 mapping_result = word_occurrences(mapper_text)
-
 print("Mapper", MAPPER_ID, "finished mapping, now sending to reducers")
 
 N_REDUCERS = int(r.get("n_reducers"))
