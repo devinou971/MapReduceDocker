@@ -1,4 +1,4 @@
-apiVersion:  v1
+apiVersion: v1
 kind: Namespace
 metadata:
   name: proj-info932
@@ -6,123 +6,134 @@ metadata:
     name: proj-info932
 
 ---
-apiVersion:  v1
-kind: Pod
+
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: proj-info932-database
   namespace: proj-info932
-  labels:
-    app: proj-info932-database
 spec:
   selector:
-        matchLabels:
-          tier: proj-info932-database
-  containers:
-  - name: proj-info932-database
-    image: redis:7.2
-    ports:
-    - containerPort:  6379
-    resources:
-      requests:
-        cpu:  100m
-        memory:  500Mi
-      limits:
-        cpu:  100m
-        memory:  500Mi
---- 
-
-apiVersion:  v1
-kind: Pod
-metadata:
-  name: manager
-  namespace: proj-info932
-  labels:
-    app: manager
-spec:
-  selector:
-      matchLabels:
-        tier: manager
-  containers:
-  - name: manager
-    image: info932/manager:latest
-    imagePullPolicy: IfNotPresent
-    ports:
-    - containerPort:  6379
-    resources:
-      requests:
-        cpu:  100m
-        memory:  500Mi
-      limits:
-        cpu:  100m
-        memory:  500Mi
-    env:
-    - name: DB_HOST
-      value: "info932-redis-access.proj-info932.svc.cluster.local"
-    - name: DB_PORT
-      value: "6379"
+    matchLabels:
+      app: proj-info932-database
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: proj-info932-database
+    spec:
+      containers:
+      - name: proj-info932-database
+        image: redis:7.2
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "500Mi"
 
 ---
 
-apiVersion:  v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: manager
+  namespace: proj-info932
+spec:
+  selector:
+    matchLabels:
+      app: manager
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: manager
+    spec:
+      containers:
+      - name: manager
+        image: info932/manager:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "500Mi"
+        env:
+        - name: DB_HOST
+          value: "info932-redis-access.proj-info932.svc.cluster.local"
+        - name: DB_PORT
+          value: "6379"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: mapper
   namespace: proj-info932
-  labels:
-    app: mapper
 spec:
-  containers:
-  - name: mapper
-    image: info932/mapper:latest
-    imagePullPolicy: IfNotPresent
-    ports:
-    - containerPort:  6379
-    resources:
-      requests:
-        cpu:  100m
-        memory:  500Mi
-      limits:
-        cpu:  100m
-        memory:  500Mi
-    env:
-    - name: DB_HOST
-      value: "info932-redis-access.proj-info932.svc.cluster.local"
-    - name: DB_PORT
-      value: "6379"
+  selector:
+    matchLabels:
+      app: mapper
+  replicas: 4
+  template:
+    metadata:
+      labels:
+        app: mapper
+    spec:
+      containers:
+      - name: mapper
+        image: info932/mapper:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "500Mi"
+        env:
+        - name: DB_HOST
+          value: "info932-redis-access.proj-info932.svc.cluster.local"
+        - name: DB_PORT
+          value: "6379"
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reducer
+  namespace: proj-info932
+spec:
+  selector:
+    matchLabels:
+      app: reducer
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: reducer
+    spec:
+      containers:
+      - name: reducer
+        image: info932/reducer:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "500Mi"
+        env:
+        - name: DB_HOST
+          value: "info932-redis-access.proj-info932.svc.cluster.local"
+        - name: DB_PORT
+          value: "6379"
 
 ---
 
 apiVersion: v1
-kind: Pod
-metadata:
-  name: reducer
-  namespace: proj-info932
-  labels:
-    app: reducer
-spec:
-  containers:
-  - name: reducer
-    image: info932/reducer:latest
-    imagePullPolicy: IfNotPresent
-    ports:
-    - containerPort:  6379
-    resources:
-      requests:
-        cpu:  100m
-        memory:  500Mi
-      limits:
-        cpu:  100m
-        memory:  500Mi
-    env:
-    - name: DB_HOST
-      value: "info932-redis-access.proj-info932.svc.cluster.local"
-    - name: DB_PORT
-      value: "6379"
-
-
----
-
-apiVersion:  v1
 kind: Service
 metadata:
   name: info932-redis-access
@@ -131,13 +142,13 @@ spec:
   selector:
     app: proj-info932-database
   ports:
-    - port:  6379 
-      targetPort:  6379 
+    - port: 6379
+      targetPort: 6379
   type: LoadBalancer
 
 ---
 
-apiVersion:  v1
+apiVersion: v1
 kind: Service
 metadata:
   name: proj-info932-database-service

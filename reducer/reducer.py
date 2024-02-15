@@ -1,36 +1,41 @@
 
 import redis
 import os
-from time import sleep
+import socket
+
 
 DB_HOST = os.environ["DB_HOST"]
 DB_PORT = os.environ["DB_PORT"]
 
 r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True)
 
-N_MAPPERS = None
+MAPPERS = r.lrange("mappers", 0, -1)
 
-REDUCER_ID = r.incr("n_reducers")
+REDUCER_ID = socket.gethostname()
+
+all_reducers = r.lrange("reducers", 0, -1)
+if REDUCER_ID not in all_reducers:
+    print("Adding new reducer")
+    r.lpush("reducers", REDUCER_ID)
 
 p = r.pubsub()
-p.subscribe(f"reducer-{REDUCER_ID}-input")
-
+p.subscribe(f"input-{REDUCER_ID}")
 print("Reducer", REDUCER_ID, "subscribed")
-
+print("Waiting for mappers to start")
 n_message_received = 0
 
-while N_MAPPERS is None or n_message_received < N_MAPPERS:
+while len(MAPPERS) == 0 or n_message_received < len(MAPPERS):
     reducer_signal = p.get_message(timeout=10,  ignore_subscribe_messages=True)
     if reducer_signal is not None:
-        if N_MAPPERS is None:
-            N_MAPPERS =  int(r.get("n_mappers"))
+        MAPPERS = r.lrange("mappers", 0, -1)
         n_message_received += 1  
 
+
 inputs = []
-for i in range(1, N_MAPPERS+1):
-   a = r.hgetall(f"mapper-{i}-reducer-{REDUCER_ID}")
-   print(type(a))
-   inputs.append(a)
+all_keys = r.keys(f"input-{REDUCER_ID}-from-*")
+for key in all_keys:
+   res = r.hgetall(key)
+   inputs.append(res)
 
 
 print(f"Reducer {REDUCER_ID} received {len(inputs)} inputs from mappers")
@@ -46,6 +51,9 @@ for input in inputs:
 
 print(f"Reducer {REDUCER_ID} finished reducing, now sending data")
 
-r.hset(f"reducer-{REDUCER_ID}", mapping=final_dictionnary)
+r.hset(f"output-{REDUCER_ID}", mapping=final_dictionnary)
 
 r.publish("end", f"reducer-{REDUCER_ID} has finished")
+
+while True:
+    pass
