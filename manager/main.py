@@ -44,6 +44,9 @@ while True:
         if n_mappers == 0 or n_reducers == 0:
             print(f"Not enough mappers or reducers to start (n_mappers = {n_mappers}, n_reducers = {n_reducers})")
 
+    r.set("map-reduce-started", 1)
+    r.publish("map-reduce-started", 1)
+
     def get_text_splits(text:str, num_parts:int):
         parts = []
 

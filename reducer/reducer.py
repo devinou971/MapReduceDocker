@@ -16,23 +16,23 @@ while True:
     if REDUCER_ID not in all_reducers:
         print("Adding new reducer")
         r.lpush("reducers", REDUCER_ID)
-    
+
     print("Reducer", REDUCER_ID, "waiting for signal")
 
-    p_start = r.pubsub()
-    p_start.subscribe("start")
-
-    res = p_start.get_message(timeout=10, ignore_subscribe_messages=True)
-    while res is None:
+    pipeline_already_started = r.get("map-reduce-started")
+    pipeline_already_started = 0 if pipeline_already_started else pipeline_already_started
+    number_of_outputs = len(r.keys(f"output-{REDUCER_ID}"))
+    if pipeline_already_started == 0 or (pipeline_already_started == 1 and number_of_outputs == 1):
+        p_start = r.pubsub()
+        p_start.subscribe("map-reduce-started")
         res = p_start.get_message(timeout=10, ignore_subscribe_messages=True)
-
+        while res is None:
+            res = p_start.get_message(timeout=10, ignore_subscribe_messages=True)
+    
     print("Reducer", REDUCER_ID, "waiting for mapped results")
 
 
     MAPPERS = r.lrange("mappers", 0, -1)
-
-
-    
 
     p = r.pubsub()
     p.subscribe(f"input-{REDUCER_ID}")

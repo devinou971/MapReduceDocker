@@ -47,12 +47,16 @@ while True:
 
     print("Mapper", MAPPER_ID, "waiting for signal")
 
-    p_start = r.pubsub()
-    p_start.subscribe("start")
-
-    res = p_start.get_message(timeout=10, ignore_subscribe_messages=True)
-    while res is None:
+    pipeline_already_started = r.get("map-reduce-started")
+    pipeline_already_started = 0 if pipeline_already_started else pipeline_already_started
+    number_of_outputs = len(r.keys(f"*from-{MAPPER_ID}"))
+    REDUCERS = r.lrange("reducers", 0, -1)
+    if pipeline_already_started == 0 or (pipeline_already_started == 1 and number_of_outputs == len(REDUCERS)):
+        p_start = r.pubsub()
+        p_start.subscribe("map-reduce-started")
         res = p_start.get_message(timeout=10, ignore_subscribe_messages=True)
+        while res is None:
+            res = p_start.get_message(timeout=10, ignore_subscribe_messages=True)
 
     print("Mapper", MAPPER_ID, "started")
 
@@ -79,15 +83,14 @@ while True:
     print("Mapper", MAPPER_ID, "finished mapping, now sending to reducers")
 
     REDUCERS = r.lrange("reducers", 0, -1)
-    N_REDUCERS = len(REDUCERS)
 
-    results_to_send = [{} for _ in range(N_REDUCERS)]
+    results_to_send = [{} for _ in range(len(REDUCERS))]
 
     for word, count in mapping_result.items():
-        r_id = get_reducer_key(word, N_REDUCERS)
+        r_id = get_reducer_key(word, len(REDUCERS))
         results_to_send[r_id][word] = count
 
-    for i in range(N_REDUCERS):
+    for i in range(len(REDUCERS)):
         r.hset(f"input-{REDUCERS[i]}-from-{MAPPER_ID}", mapping=results_to_send[i])
         r.publish(f"input-{REDUCERS[i]}", f"upload finished from mapper {MAPPER_ID}")
 
