@@ -11,7 +11,7 @@ r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True)
 
 
 while True:
-    
+    # Add the reducer to the list of reducers
     all_reducers = r.lrange("reducers", 0, -1)
     if REDUCER_ID not in all_reducers:
         print("Adding new reducer")
@@ -31,33 +31,30 @@ while True:
     
     print("Reducer", REDUCER_ID, "waiting for mapped results")
 
-
     MAPPERS = r.lrange("mappers", 0, -1)
 
+    # Waiting for the mappers to send their results
     p = r.pubsub()
     p.subscribe(f"input-{REDUCER_ID}")
     print("Reducer", REDUCER_ID, "subscribed")
     print("Waiting for mappers to start")
     n_message_received = 0
-
     while len(MAPPERS) == 0 or n_message_received < len(MAPPERS):
         reducer_signal = p.get_message(timeout=10,  ignore_subscribe_messages=True)
         if reducer_signal is not None:
             MAPPERS = r.lrange("mappers", 0, -1)
             n_message_received += 1  
 
-
+    # Getting the results
     inputs = []
     all_keys = r.keys(f"input-{REDUCER_ID}-from-*")
     for key in all_keys:
         res = r.hgetall(key)
         inputs.append(res)
-
-
     print(f"Reducer {REDUCER_ID} received {len(inputs)} inputs from mappers")
 
+    # Reducing the results
     final_dictionnary = {}
-
     for input in inputs:
         for word, count in input.items():
             if word in final_dictionnary:
@@ -66,7 +63,6 @@ while True:
                 final_dictionnary[word] = int(count)
 
     print(f"Reducer {REDUCER_ID} finished reducing, now sending data")
-
     r.hset(f"output-{REDUCER_ID}", mapping=final_dictionnary)
 
     r.publish("end", f"reducer-{REDUCER_ID} has finished")

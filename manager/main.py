@@ -9,8 +9,37 @@ DB_PORT = os.environ["DB_PORT"]
 MAPPER_IDS = []
 REDUCER_IDS = []
 
-print("DB_HOST:", DB_HOST)
-print("DB_PORT:", DB_PORT)
+
+def get_text_splits(text:str, num_parts:int):
+        """
+           Calculate the offsets to split the text into num_parts parts.
+           The split appens between words.
+
+           text: the text to split
+           num_parts: the number of parts to split the text into
+           returns: a list of strings, each string is of the form "<start offset> <end offset>"
+        """
+        parts = []
+
+        nb_carac = len(text) // num_parts
+
+        start_offset = 0
+        for i in range(num_parts-1):
+            offset = 0
+            ch = ''
+
+            while ch != ' ':
+                offset += 1
+                ch = text[(i+1)*nb_carac+offset]
+
+            end_offset = (i+1)*nb_carac + offset
+            
+            parts.append(f"{start_offset} {end_offset}")
+            start_offset = end_offset
+
+        parts.append(f"{start_offset} {len(text)}")
+        
+        return parts
 
 r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True, socket_connect_timeout=15)
 
@@ -20,21 +49,24 @@ with open(argv[1], "r") as f:
 
 r.set("full-text", file_content)
 
+
 p = r.pubsub()
 p.subscribe("start")
 
 while True:
     n_mappers = 0
     n_reducers = 0
-
-    # Wait for mappers and reducers 
+    
 
     while n_mappers == 0 or n_reducers == 0:
+
+        # Waiting for the start signal
         print("Waiting for start signal ...")
         res = p.get_message(timeout=10, ignore_subscribe_messages=True)
         while res is None:
             res = p.get_message(timeout=10, ignore_subscribe_messages=True)
 
+        # Waiting for mappers and reducers 
         MAPPER_IDS = r.lrange("mappers", 0, -1)
         REDUCER_IDS = r.lrange("reducers", 0, -1)
 
@@ -44,35 +76,16 @@ while True:
         if n_mappers == 0 or n_reducers == 0:
             print(f"Not enough mappers or reducers to start (n_mappers = {n_mappers}, n_reducers = {n_reducers})")
 
+    # Telling mappers and reducers to be ready
     r.set("map-reduce-started", 1)
     r.publish("map-reduce-started", 1)
 
-    def get_text_splits(text:str, num_parts:int):
-        parts = []
-
-        nb_carac = len(text) // num_parts
-
-        last_index = 0
-        for i in range(num_parts-1):
-            offset = 0
-            ch = ''
-
-            while ch != ' ':
-                offset += 1
-                ch = text[(i+1)*nb_carac+offset]
-
-            end_part_index = (i+1)*nb_carac + offset
-            
-            parts.append(f"{last_index} {end_part_index}")
-            last_index = end_part_index
-
-        parts.append(f"{last_index} {len(text)}")
-        
-        return parts
-
+    
+    # Splitting the file for the mappers
     print(f"Splitting the file for n_mappers = {n_mappers}")
     file_splits = get_text_splits(file_content, n_mappers)
 
+    # Sending the splits to the mappers
     print(f"Sending the splits to the mappers")
     for i, mapper_id in enumerate(MAPPER_IDS):
         print("Manager sending to mapper", mapper_id, "data with length", len(file_splits[i]))
@@ -80,15 +93,16 @@ while True:
         r.publish(f"input-{mapper_id}", file_splits[i])
 
     p.unsubscribe("start")
+
+    # Waiting for the reducers to finish
     p.subscribe("end")
-
     n_received_message = 0
-
     while n_received_message < n_reducers:
         reducer_end_messages = p.get_message(timeout=10,  ignore_subscribe_messages=True)
         if reducer_end_messages is not None:
             n_received_message += 1
 
+    # Aggregating the results
     reducer_outputs = r.keys("output-*")
     final_output = {}
     for output_id in reducer_outputs:
@@ -97,5 +111,6 @@ while True:
 
     r.hset("final-output", mapping=final_output)
 
+    # Cleaning up
     for i in reducer_outputs+r.keys("input-*"):
         r.delete(i)
