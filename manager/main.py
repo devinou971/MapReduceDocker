@@ -43,11 +43,7 @@ def get_text_splits(text:str, num_parts:int):
 
 r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True, socket_connect_timeout=15)
 
-file_content = ""
-with open(argv[1], "r") as f:
-    file_content = f.read()
 
-r.set("full-text", file_content)
 
 
 p = r.pubsub()
@@ -56,15 +52,19 @@ p.subscribe("start")
 while True:
     n_mappers = 0
     n_reducers = 0
+
     
+    file_name = None
 
     while n_mappers == 0 or n_reducers == 0:
 
         # Waiting for the start signal
         print("Waiting for start signal ...")
-        res = p.get_message(timeout=10, ignore_subscribe_messages=True)
-        while res is None:
-            res = p.get_message(timeout=10, ignore_subscribe_messages=True)
+        response = p.get_message(timeout=10, ignore_subscribe_messages=True)
+        while response is None:
+            response = p.get_message(timeout=10, ignore_subscribe_messages=True)
+        
+        file_name = response["data"]
 
         # Waiting for mappers and reducers 
         MAPPER_IDS = r.lrange("mappers", 0, -1)
@@ -75,6 +75,15 @@ while True:
 
         if n_mappers == 0 or n_reducers == 0:
             print(f"Not enough mappers or reducers to start (n_mappers = {n_mappers}, n_reducers = {n_reducers})")
+
+    if not os.path.exists(os.path.join("/data/", file_name)):
+        print("File not found")
+        continue
+
+    with open(os.path.join("/data/", file_name) , "r") as f:
+        file_content = f.read()
+
+    r.set("full-text", file_content)
 
     # Telling mappers and reducers to be ready
     r.set("map-reduce-started", 1)

@@ -55,6 +55,9 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 6379
+        volumeMounts:
+        - mountPath: /data
+          name: data-volumne
         resources:
           requests:
             cpu: "100m"
@@ -64,6 +67,10 @@ spec:
           value: "info932-redis-access.proj-info932.svc.cluster.local"
         - name: DB_PORT
           value: "6379"
+      volumes:
+        - name: data-volumne
+          emptyDir: 
+            sizeLimit: 100Mi
 
 ---
 
