@@ -18,8 +18,12 @@ r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True, socket_connec
 def word_occurrences(text):
     """
         Calculate the number of occurrences of each word in the text.
-        text: the text to process
-        results: a dictionary with the word as key and the number of occurrences as value
+        
+        Args:
+            text (str): The text to process.
+        
+        Returns:
+            dict: A dictionary with the word as key and the number of occurrences as value.
     """
     word_pattern = re.compile(r'\b\w+\b')
     words = [word.lower() for word in word_pattern.findall(text)]
@@ -38,25 +42,30 @@ def word_occurrences(text):
 def get_reducer_key(word, num_reducers):
     """
         Finds the reducer that will process the word.
-        word: the word to calculate the reducer ID for
-        num_reducers: the number of reducers
-        returns: the reducer ID
+        
+        Args:
+            word (str): The word to calculate the reducer ID for.
+            num_reducers (int): The number of reducers.
+        
+        Returns:
+            int: The reducer ID.
     """
     hash_val = int(hashlib.sha256(word.encode()).hexdigest(), 16)
     return hash_val % num_reducers
 
 
-# Add the mapper to the list of mappers
+# Add the mapper to the list of mappers in Redis
 all_mappers = r.lrange("mappers", 0, -1)
 if MAPPER_ID not in all_mappers:
     print("Adding new mapper")
     r.lpush("mappers", MAPPER_ID)
 
-
+# Main loop to manage mapping
 while True:
     print("Mapper", MAPPER_ID, "waiting for signal")
 
     # Wait for the signal to start the pipeline
+    # Check if pipeline has started or if mapper's outputs have been received by all reducers
     pipeline_already_started = r.get("map-reduce-started")
     pipeline_already_started = 0 if pipeline_already_started else pipeline_already_started
     number_of_outputs = len(r.keys(f"*from-{MAPPER_ID}"))
@@ -72,7 +81,7 @@ while True:
 
     print("Mapper", MAPPER_ID, "waiting for data")
 
-    # Get the offsets of the subtexts for this mapper
+    # Retrieve data portion to process
     mapper_subtext_ids = r.get(f"input-{MAPPER_ID}")
     if mapper_subtext_ids is None:
         p = r.pubsub()

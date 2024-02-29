@@ -12,13 +12,20 @@ REDUCER_IDS = []
 
 def get_text_splits(text:str, num_parts:int):
         """
-           Calculate the offsets to split the text into num_parts parts.
-           The split appens between words.
-
-           text: the text to split
-           num_parts: the number of parts to split the text into
-           returns: a list of strings, each string is of the form "<start offset> <end offset>"
+            Calculate the offsets to split the text into num_parts parts.
+            The split appens between words.
+            
+            Args:
+                text (str): The text to split.
+                num_parts (int): The number of parts to split the text into.
+            
+            Returns:
+                list: A list of strings, each string is of the form "<start offset> <end offset>".
         """
+        # Function to split the text into parts based on number of parts needed.
+        # Splits text at word boundaries to ensure words aren't split between parts.
+        # Returns a list of strings indicating start and end offsets for each part.
+        # Example: ["0 100", "100 200", ...]
         parts = []
 
         nb_carac = len(text) // num_parts
@@ -49,16 +56,15 @@ r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True, socket_connec
 p = r.pubsub()
 p.subscribe("start")
 
+# Main loop to manage the MapReduce process
 while True:
+    # Initialize mapper and reducer counts
     n_mappers = 0
     n_reducers = 0
-
-    
     file_name = None
 
+    # Wait for start signal and check if enough mappers and reducers are available
     while n_mappers == 0 or n_reducers == 0:
-
-        # Waiting for the start signal
         print("Waiting for start signal ...")
         response = p.get_message(timeout=10, ignore_subscribe_messages=True)
         while response is None:
@@ -76,13 +82,16 @@ while True:
         if n_mappers == 0 or n_reducers == 0:
             print(f"Not enough mappers or reducers to start (n_mappers = {n_mappers}, n_reducers = {n_reducers})")
 
+    # Check if input file exists
     if not os.path.exists(os.path.join("/data/", file_name)):
         print("File not found")
         continue
 
+    # Read file content if exists
     with open(os.path.join("/data/", file_name) , "r") as f:
         file_content = f.read()
 
+    # Set full-text in Redis
     r.set("full-text", file_content)
 
     # Telling mappers and reducers to be ready

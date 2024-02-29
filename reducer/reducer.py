@@ -9,7 +9,7 @@ REDUCER_ID = socket.gethostname()
 
 r = redis.Redis(host=DB_HOST, port=DB_PORT, decode_responses=True)
 
-
+# Main loop
 while True:
     # Add the reducer to the list of reducers
     all_reducers = r.lrange("reducers", 0, -1)
@@ -19,6 +19,7 @@ while True:
 
     print("Reducer", REDUCER_ID, "waiting for signal")
 
+    # Check if pipeline has started or if mapper results have been received
     pipeline_already_started = r.get("map-reduce-started")
     pipeline_already_started = 0 if pipeline_already_started else pipeline_already_started
     number_of_outputs = len(r.keys(f"output-{REDUCER_ID}"))
