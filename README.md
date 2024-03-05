@@ -79,3 +79,27 @@ If you decidedto use the bible.txt, then it will be :
 redis-cli -h 127.0.0.1 -p 6379 publish start bible.txt
 ```
 
+## Getting the results
+
+After some time, you will see the result in the Redis database with the key `final-output`. \
+For example, you will be able to do :
+```bash
+redis-cli -h 127.0.0.1 -p 6379 HGET final-output god
+```
+
+## How it works
+
+Here is a simplified explanation of how the MapReduce process works.
+
+When the manager is first created, it creates a Redis Pub/Sub channel named "start". This channel is used by the user to give the manager a file to process. 
+
+Once the signal is received, the manager will verify if there are enough Mapper and Reducer instances to process the file. If there are not enough instances, the manager will wait for the instances to be created.
+
+Once there are enough instances, the manager will upload the file to Redis and send offsets to the Mappers. These offsets are calculated to split the file into chunks.
+
+The mappers then do the work of mapping the data. The mappers send the results to the corresponding reducer based on a hash calculated one each word. The messages are sent through Redis Pub/Sub channels, and they are saved in the database, just in case a Reducer fails and needs to redo the work. If the file processed is big enough, then you will be able to see the saved data in the Redis database.
+
+The reducers then do the work of reducing the data. The reducers receive the data from the mappers and aggregate them. Once it is done, the reducers save the results to the database, and send a "end" message to the manager.
+
+The manager then adds all the results from the reducers to the final output element in the database. 
+
